@@ -1,0 +1,25 @@
+# API keys never belong in a repository
+.env
+.env.*
+
+# Models, pictures and results: keep your own out of version control
+*.glb
+*.vrm
+*.mp4
+*.part
+out/
+# ...except the models the example workflow converts
+!models/*.glb
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

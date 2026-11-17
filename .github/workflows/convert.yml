@@ -1,0 +1,49 @@
+# Example: convert every models/*.glb to a VRM 1.0 avatar with the Riggle API
+# and keep the results as a workflow artifact.
+#
+# Setup: add a repository secret named RIGGLE_API_KEY
+# (Settings > Secrets and variables > Actions). Keys are made at
+# https://app.riggle3d.com/developers/
+#
+# It only runs when you start it by hand (Actions > Convert GLB to VRM > Run
+# workflow), because every run spends 10 API tokens per model.
+name: Convert GLB to VRM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Convert models/*.glb
+        env:
+          RIGGLE_API_KEY: ${{ secrets.RIGGLE_API_KEY }}
+        run: |
+          shopt -s nullglob
+          mkdir -p out
+          failed=0
+          for model in models/*.glb; do
+            name=$(basename "$model" .glb)
+            python python/riggle.py convert "$model" \
+              -o "out/$name.vrm" --preview "out/$name.mp4" || failed=1
+          done
+          exit $failed
+
+      - name: Upload the VRMs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vrm
+          path: out/
+          if-no-files-found: warn

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VRM expression viewer (three-vrm)</title>
+<!--
+  A single static page that loads a local .vrm with three-vrm and plays its
+  visemes, blinks and emotions, so you can see what a conversion gave you.
+
+  Open it in a browser (double-click works; so does any static server) and
+  choose a .vrm file. The file is read in the page and never uploaded.
+
+  There is deliberately no Riggle API key here. A key in browser code is
+  readable by every visitor and spends your API tokens, and the API is meant
+  to be called from a server or a script. Convert with python/riggle.py,
+  node/riggle.mjs or examples/curl.sh, then look at the result here.
+
+  Versions are pinned: three-vrm 3.4.0 with three 0.167.1. The bare "three"
+  specifier inside three-vrm resolves through this import map.
+-->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.0/lib/three-vrm.module.js"
+  }
+}
+</script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; grid-template-columns: 1fr 260px;
+    background: #15171c; color: #e6e8ec;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  #stage { position: relative; min-width: 0; min-height: 0; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #hint {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    text-align: center; padding: 24px; color: #9aa1ad; pointer-events: none;
+  }
+  #hint[hidden] { display: none; }
+  #now {
+    position: absolute; left: 16px; bottom: 14px;
+    font: 600 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #fff; text-shadow: 0 1px 6px #000;
+  }
+  aside {
+    border-left: 1px solid #2a2e37; background: #1b1e25;
+    padding: 16px; overflow-y: auto;
+  }
+  h1 { font-size: 15px; margin: 0 0 12px; }
+  h2 {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: #9aa1ad; margin: 18px 0 8px;
+  }
+  .file {
+    display: block; padding: 10px; border: 1px dashed #4a5060;
+    border-radius: 6px; text-align: center; cursor: pointer;
+  }
+  .file:hover, body.dragging .file { border-color: #8ab4ff; color: #8ab4ff; }
+  .file input { display: none; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button {
+    font: inherit; color: inherit; background: #262a33;
+    border: 1px solid #353a46; border-radius: 6px; padding: 6px 8px;
+    cursor: pointer; text-align: left;
+  }
+  button:hover:not(:disabled) { border-color: #6b7386; }
+  button.on { background: #2f4f8f; border-color: #8ab4ff; }
+  button:disabled { opacity: .35; cursor: default; text-decoration: line-through; }
+  label.check { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  #info { color: #9aa1ad; font-size: 12px; margin-top: 14px; overflow-wrap: anywhere; }
+  #info b { color: #e6e8ec; font-weight: 600; }
+  @media (max-width: 640px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
+    aside { border-left: 0; border-top: 1px solid #2a2e37; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="canvas"></canvas>
+  <div id="hint">Choose a .vrm file, or drop one anywhere on this page.</div>
+  <div id="now"></div>
+</div>
+<aside>
+  <h1>VRM expression viewer</h1>
+  <label class="file">Choose a .vrm file<input id="file" type="file" accept=".vrm,.glb"></label>
+  <label class="check"><input id="cycle" type="checkbox" checked> Cycle through every expression</label>
+
+  <h2>Visemes</h2>
+  <div class="grid" data-group="aa ih ee oh ou"></div>
+  <h2>Blink</h2>
+  <div class="grid" data-group="blink blinkLeft blinkRight"></div>
+  <h2>Emotions</h2>
+  <div class="grid" data-group="happy angry surprised"></div>
+
+  <div id="info"></div>
+</aside>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
+
+// The expressions a Riggle conversion writes, in the order they are played.
+const EXPRESSIONS = ['aa', 'ih', 'ee', 'oh', 'ou', 'blink', 'blinkLeft', 'blinkRight',
+  'happy', 'angry', 'surprised'];
+const SECONDS_EACH = 1.2;
+
+const canvas = document.getElementById('canvas');
+const stage = document.getElementById('stage');
+const hint = document.getElementById('hint');
+const now = document.getElementById('now');
+const info = document.getElementById('info');
+const cycleBox = document.getElementById('cycle');
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15171c);
+scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+sun.position.set(1, 2, 3);
+scene.add(sun);
+
+// A VRM 1.0 avatar faces +Z, so the camera sits in front of it on +Z.
+const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 50);
+camera.position.set(0, 1.4, 1.6);
+const controls = new OrbitControls(camera, canvas);
+controls.target.set(0, 1.4, 0);
+controls.enableDamping = true;
+
+let vrm = null;      // the loaded avatar
+let held = null;     // an expression pinned by its button, or null
+let cycleTime = 0;
+
+// One button per expression; a button is disabled when the file lacks it.
+const buttons = {};
+for (const group of document.querySelectorAll('[data-group]')) {
+  for (const name of group.dataset.group.split(' ')) {
+    const button = document.createElement('button');
+    button.textContent = name;
+    button.disabled = true;
+    button.addEventListener('click', () => {
+      held = held === name ? null : name;
+      cycleBox.checked = false;
+    });
+    group.append(button);
+    buttons[name] = button;
+  }
+}
+cycleBox.addEventListener('change', () => { if (cycleBox.checked) held = null; });
+
+async function load(file) {
+  hint.textContent = `Loading ${file.name}`;
+  hint.hidden = false;
+  try {
+    const loader = new GLTFLoader();
+    loader.register((parser) => new VRMLoaderPlugin(parser));
+    const gltf = await loader.parseAsync(await file.arrayBuffer(), '');
+    const loaded = gltf.userData.vrm;
+    if (!loaded) throw new Error('this file has no VRM extension - it is a plain GLB');
+
+    if (vrm) {
+      scene.remove(vrm.scene);
+      VRMUtils.deepDispose(vrm.scene);
+    }
+    vrm = loaded;
+    VRMUtils.rotateVRM0(vrm);            // turns a VRM 0.x around; a 1.0 file is left alone
+    vrm.scene.traverse((object) => { object.frustumCulled = false; });
+    scene.add(vrm.scene);
+
+    // Humanoid bones at work: bring the arms down from the T-pose.
+    const left = vrm.humanoid.getNormalizedBoneNode('leftUpperArm');
+    const right = vrm.humanoid.getNormalizedBoneNode('rightUpperArm');
+    if (left) left.rotation.z = -1.2;
+    if (right) right.rotation.z = 1.2;
+    vrm.update(0);
+
+    // Frame the head.
+    const head = vrm.humanoid.getNormalizedBoneNode('head');
+    const focus = new THREE.Vector3(0, 1.4, 0);
+    if (head) head.getWorldPosition(focus);
+    focus.y += 0.06;
+    controls.target.copy(focus);
+    camera.position.set(focus.x, focus.y, focus.z + 1.3);
+
+    const has = Object.keys(vrm.expressionManager?.expressionMap ?? {});
+    for (const name of EXPRESSIONS) buttons[name].disabled = !has.includes(name);
+    const missing = EXPRESSIONS.filter((name) => !has.includes(name));
+    const meta = vrm.meta ?? {};
+    info.innerHTML = '';
+    info.append(
+      line('File', file.name),
+      line('VRM', meta.metaVersion === '0' ? '0.x' : '1.0'),
+      line('Expressions', has.join(', ') || 'none'),
+      line('Missing', missing.join(', ') || 'none - all eleven are here'),
+    );
+    held = null;
+    cycleTime = 0;
+    hint.hidden = true;
+  } catch (error) {
+    console.error(error);
+    hint.textContent = `Could not load ${file.name}: ${error.message}`;
+  }
+}
+
+function line(label, value) {
+  const p = document.createElement('div');
+  const b = document.createElement('b');
+  b.textContent = `${label}: `;
+  p.append(b, value);
+  return p;
+}
+
+document.getElementById('file').addEventListener('change', (event) => {
+  if (event.target.files[0]) load(event.target.files[0]);
+});
+window.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  document.body.classList.add('dragging');
+});
+window.addEventListener('dragleave', () => document.body.classList.remove('dragging'));
+window.addEventListener('drop', (event) => {
+  event.preventDefault();
+  document.body.classList.remove('dragging');
+  if (event.dataTransfer.files[0]) load(event.dataTransfer.files[0]);
+});
+
+function resize() {
+  const { clientWidth: width, clientHeight: height } = stage;
+  if (canvas.width !== Math.floor(width * renderer.getPixelRatio()) ||
+      canvas.height !== Math.floor(height * renderer.getPixelRatio())) {
+    renderer.setSize(width, height, false);
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
+  }
+}
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const delta = clock.getDelta();
+  resize();
+  if (vrm?.expressionManager) {
+    const manager = vrm.expressionManager;
+    const available = EXPRESSIONS.filter((name) => manager.getExpression(name));
+    for (const name of available) manager.setValue(name, 0);
+
+    let label = '';
+    if (held && available.includes(held)) {
+      manager.setValue(held, 1);
+      label = held;
+    } else if (cycleBox.checked && available.length) {
+      // Each expression eases 0 -> 1 -> 0, one after another.
+      cycleTime += delta;
+      const index = Math.floor(cycleTime / SECONDS_EACH) % available.length;
+      const phase = (cycleTime % SECONDS_EACH) / SECONDS_EACH;
+      manager.setValue(available[index], Math.sin(phase * Math.PI));
+      label = available[index];
+    }
+    now.textContent = label;
+    for (const name of EXPRESSIONS) buttons[name].classList.toggle('on', name === label);
+    vrm.update(delta);                   // applies expressions, lookAt, spring bones
+  }
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+// For poking at the avatar from the browser console.
+window.viewer = { get vrm() { return vrm; }, load };
+</script>
+</body>
+</html>

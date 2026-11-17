@@ -236,7 +236,7 @@ The current packs and prices are in the
 
 ## How it works
 
-Nobody marks anything by hand; the pipeline runs on its own:
+The pipeline, start to finish:
 
 1. **Picture only:** the picture is checked (and redrawn, if you asked for
    `fix`), then a 3D model is generated from it.

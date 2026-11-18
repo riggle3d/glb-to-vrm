@@ -6,6 +6,8 @@ humanoid bones, five visemes, blinks and three emotions, ready for lip
 sync. This repository holds runnable examples: three curl calls, and a
 one-file client for Python and for Node with no dependencies.
 
+<p align="center"><img src="assets/expressions.gif" width="480" alt="A GLB character converted to a VRM 1.0 avatar by the Riggle API, playing its visemes, blinks and emotions"></p>
+
 ```bash
 python python/riggle.py convert character.glb -o character.vrm
 ```
@@ -17,6 +19,8 @@ python python/riggle.py convert character.glb -o character.vrm
 ## Quick start: convert GLB to VRM with curl
 
 Upload, poll, download. That is the whole API.
+
+![GLB to VRM: character.glb goes in, a VRM 1.0 avatar with the aa and oh visemes and a blink comes out](assets/glb-to-vrm.png)
 
 ```bash
 export RIGGLE_API_KEY=rgl_...

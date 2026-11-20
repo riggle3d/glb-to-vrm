@@ -1,0 +1,44 @@
+{
+  "name": "glb-to-vrm",
+  "version": "1.0.0",
+  "description": "Convert GLB, VRM or a picture to a talking VRM 1.0 avatar with visemes, blinks and expressions. Node client and CLI for the Riggle API, zero dependencies.",
+  "type": "module",
+  "main": "./riggle.mjs",
+  "exports": "./riggle.mjs",
+  "bin": {
+    "riggle": "riggle.mjs"
+  },
+  "files": [
+    "riggle.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "glb",
+    "vrm",
+    "glb-to-vrm",
+    "vrm-converter",
+    "gltf",
+    "avatar",
+    "vtuber",
+    "lip-sync",
+    "visemes",
+    "three-vrm",
+    "image-to-vrm",
+    "3d"
+  ],
+  "homepage": "https://riggle3d.com/en/guides/glb-to-vrm-api/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riggle3d/glb-to-vrm.git",
+    "directory": "node"
+  },
+  "bugs": {
+    "url": "https://github.com/riggle3d/glb-to-vrm/issues"
+  },
+  "license": "MIT",
+  "author": "Riggle (https://riggle3d.com)"
+}

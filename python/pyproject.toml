@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glb-to-vrm"
+version = "1.0.0"
+description = "Convert GLB, VRM or a picture to a talking VRM 1.0 avatar with visemes, blinks and expressions. Python client and CLI for the Riggle API, standard library only."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Riggle" }]
+keywords = ["glb", "vrm", "glb-to-vrm", "vrm-converter", "gltf", "avatar", "vtuber", "lip-sync", "visemes", "three-vrm", "image-to-vrm", "3d"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Multimedia :: Graphics :: 3D Modeling",
+  "Environment :: Console",
+]
+
+[project.urls]
+Homepage = "https://riggle3d.com/en/guides/glb-to-vrm-api/"
+Documentation = "https://riggle3d.com/en/guides/vrm-api/"
+Source = "https://github.com/riggle3d/glb-to-vrm"
+"OpenAPI spec" = "https://riggle3d.com/openapi.json"
+
+[project.scripts]
+riggle = "riggle:main"
+
+[tool.setuptools]
+py-modules = ["riggle"]

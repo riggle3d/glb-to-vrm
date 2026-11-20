@@ -1,0 +1,1070 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Riggle API",
+    "version": "1.0.0",
+    "summary": "A GLB, a VRM or a picture in; a talking VRM 1.0 avatar out.",
+    "description": "Send a 3D model (`.glb` or `.vrm`, rigged or not) or a picture of a character (`.png` or `.jpg`) and get back a VRM 1.0 avatar with humanoid bones, five visemes (`aa`, `ih`, `ee`, `oh`, `ou`), blinks (`blink`, `blinkLeft`, `blinkRight`) and three emotions (`happy`, `angry`, `surprised`), plus a preview video of every expression.\n\nEverything is asynchronous: create a conversion, poll it every 3-5 seconds until `status` is `succeeded` or `failed`, then download the VRM. A model takes 1-3 minutes, a picture 3-6.\n\nPaid in API tokens, bought in packs at https://app.riggle3d.com/developers/ (model to VRM 10 tokens, picture to VRM 25). Tokens are taken when a conversion is created and returned automatically if it fails.\n\nPython and Node clients and examples: https://github.com/riggle3d/glb-to-vrm",
+    "contact": {
+      "name": "Riggle",
+      "url": "https://riggle3d.com/en/guides/vrm-api/"
+    },
+    "termsOfService": "https://riggle3d.com/"
+  },
+  "externalDocs": {
+    "description": "API reference with examples",
+    "url": "https://riggle3d.com/en/guides/vrm-api/"
+  },
+  "servers": [
+    {
+      "url": "https://app.riggle3d.com/api/v1"
+    }
+  ],
+  "security": [
+    {
+      "bearer": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Conversions",
+      "description": "A model or a picture to a VRM 1.0 avatar."
+    },
+    {
+      "name": "Pictures",
+      "description": "Redraw a picture as one full-body front view."
+    },
+    {
+      "name": "Account",
+      "description": "Balance and prices."
+    }
+  ],
+  "paths": {
+    "/conversions": {
+      "post": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "createConversion",
+        "summary": "Convert a GLB, a VRM or a picture to a VRM 1.0 avatar",
+        "description": "Send exactly one of `file` (a model) or `image` (a picture). Costs 10 API tokens for a model and 25 for a picture (+2 when `fix` redraws it). A picture is checked before anything is charged; one that is not a whole humanoid character facing the camera is refused with `422 picture_rejected`.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Any string up to 64 characters. A retry with the same key returns the first object (status 200) instead of making, and charging for, a second one.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "contentMediaType": "model/gltf-binary",
+                    "description": "A `.glb` or `.vrm`, up to 100 MB. A humanoid character, rigged or unrigged."
+                  },
+                  "image": {
+                    "type": "string",
+                    "contentMediaType": "image/png",
+                    "description": "Instead of `file`: a `.png` or `.jpg` up to 20 MB showing one whole character, standing, facing the camera."
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "What to call it. Defaults to the file's name."
+                  },
+                  "fix": {
+                    "type": "string",
+                    "enum": [
+                      "true",
+                      "false",
+                      "1",
+                      "0",
+                      "yes",
+                      "no",
+                      "on",
+                      "off"
+                    ],
+                    "description": "Pictures only. If the picture check finds a problem, redraw the picture as one full-body front view first (+2 API tokens, charged only when it is redrawn)."
+                  },
+                  "force": {
+                    "type": "string",
+                    "enum": [
+                      "true",
+                      "false",
+                      "1",
+                      "0",
+                      "yes",
+                      "no",
+                      "on",
+                      "off"
+                    ],
+                    "description": "Pictures only. Skip the picture check and use the picture as it is. Wins over `fix`."
+                  }
+                },
+                "oneOf": [
+                  {
+                    "required": [
+                      "file"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "image"
+                    ]
+                  }
+                ]
+              },
+              "encoding": {
+                "image": {
+                  "contentType": "image/png, image/jpeg"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The conversion was created and charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversion"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "A retry with an Idempotency-Key already used: the first conversion.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversion"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/InsufficientTokens"
+          },
+          "413": {
+            "$ref": "#/components/responses/FileTooLarge"
+          },
+          "422": {
+            "description": "The picture is unlikely to make a good avatar. Nothing was charged. Send another, or the same one with `fix=true` or `force=true`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureRejected"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyActive"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "listConversions",
+        "summary": "List the latest conversions, newest first",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The conversions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "object",
+                    "data"
+                  ],
+                  "properties": {
+                    "object": {
+                      "const": "list"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Conversion"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/conversions/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The conversion's id.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "getConversion",
+        "summary": "Poll a conversion",
+        "description": "Poll every 3-5 seconds until `status` is `succeeded` or `failed`.",
+        "responses": {
+          "200": {
+            "description": "The conversion.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Conversion"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "deleteConversion",
+        "summary": "Delete a conversion",
+        "description": "Its files are erased for good within a week. Deleting a conversion that is still running does not return its tokens.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/conversions/{id}/vrm": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The conversion's id.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "downloadVrm",
+        "summary": "Download the VRM 1.0 file",
+        "responses": {
+          "200": {
+            "description": "The VRM 1.0 file.",
+            "content": {
+              "model/gltf-binary": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "model/gltf-binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotReady"
+          }
+        }
+      }
+    },
+    "/conversions/{id}/preview.mp4": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The conversion's id.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "downloadPreviewVideo",
+        "summary": "Download the preview video that plays every expression",
+        "responses": {
+          "200": {
+            "description": "An MP4 video.",
+            "content": {
+              "video/mp4": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "video/mp4"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotReady"
+          }
+        }
+      }
+    },
+    "/conversions/{id}/preview/{name}.png": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The conversion's id.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "description": "One of the keys of the conversion's `preview_images`.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Conversions"
+        ],
+        "operationId": "downloadPreviewImage",
+        "summary": "Download one still of the preview",
+        "responses": {
+          "200": {
+            "description": "A PNG image.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "image/png"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotReady"
+          }
+        }
+      }
+    },
+    "/pictures/fix": {
+      "post": {
+        "tags": [
+          "Pictures"
+        ],
+        "operationId": "createPictureFix",
+        "summary": "Redraw a picture as one full-body, front-facing view",
+        "description": "Always redraws; there is no check first. Costs 2 API tokens, returned if no picture comes back. Usually done in under a minute. The result can be sent to `POST /conversions` as `image`.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Any string up to 64 characters. A retry with the same key returns the first object (status 200) instead of making, and charging for, a second one.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "image"
+                ],
+                "properties": {
+                  "image": {
+                    "type": "string",
+                    "contentMediaType": "image/png",
+                    "description": "A `.png` or `.jpg` up to 20 MB."
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              },
+              "encoding": {
+                "image": {
+                  "contentType": "image/png, image/jpeg"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The picture fix was created and charged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureFix"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "A retry with an Idempotency-Key already used: the first picture fix.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureFix"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/InsufficientTokens"
+          },
+          "413": {
+            "$ref": "#/components/responses/FileTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyActive"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/pictures/fix/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The picture fix's id.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Pictures"
+        ],
+        "operationId": "getPictureFix",
+        "summary": "Poll a picture fix",
+        "responses": {
+          "200": {
+            "description": "The picture fix.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PictureFix"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/pictures/fix/{id}/image": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "The picture fix's id.",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Pictures"
+        ],
+        "operationId": "downloadFixedPicture",
+        "summary": "Download the redrawn picture",
+        "description": "Kept for 7 days.",
+        "responses": {
+          "200": {
+            "description": "A PNG image.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "image/png"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/NotReady"
+          }
+        }
+      }
+    },
+    "/account": {
+      "get": {
+        "tags": [
+          "Account"
+        ],
+        "operationId": "getAccount",
+        "summary": "API token balance and prices",
+        "responses": {
+          "200": {
+            "description": "The account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key (`rgl_...`) from https://app.riggle3d.com/developers/. The secret is shown once."
+      }
+    },
+    "schemas": {
+      "Conversion": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "status",
+          "stage",
+          "name",
+          "input",
+          "cost",
+          "refunded",
+          "created_at",
+          "finished_at",
+          "error",
+          "warnings",
+          "vrm_url",
+          "preview_video_url",
+          "preview_images"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "object": {
+            "const": "conversion"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "stage": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "While processing: `generating_model` (pictures only), `rigging` (unrigged models only), `marking_face`, `building_vrm`. `null` once finished.",
+            "examples": [
+              "building_vrm"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "input": {
+            "type": "string",
+            "enum": [
+              "model",
+              "image"
+            ]
+          },
+          "cost": {
+            "type": "integer",
+            "description": "API tokens charged."
+          },
+          "refunded": {
+            "type": "boolean",
+            "description": "`true` when a failed conversion returned its tokens."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              }
+            ],
+            "description": "`{\"code\": \"conversion_failed\", \"message\": ...}` when failed."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The avatar was built, but check the preview: e.g. a viseme barely moves."
+          },
+          "vrm_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "Set on success. Needs the same Authorization header."
+          },
+          "preview_video_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          },
+          "preview_images": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Still name to URL. Set on success."
+          }
+        }
+      },
+      "PictureFix": {
+        "type": "object",
+        "required": [
+          "id",
+          "object",
+          "status",
+          "name",
+          "cost",
+          "refunded",
+          "created_at",
+          "finished_at",
+          "error",
+          "image_url"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "object": {
+            "const": "picture_fix"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "cost": {
+            "type": "integer"
+          },
+          "refunded": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ErrorDetail"
+              }
+            ],
+            "description": "`{\"code\": \"fix_failed\", \"message\": ...}` when failed."
+          },
+          "image_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri",
+            "description": "Set on success. Needs the same Authorization header."
+          }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "required": [
+          "object",
+          "api_tokens",
+          "prices",
+          "max_active_conversions"
+        ],
+        "properties": {
+          "object": {
+            "const": "account"
+          },
+          "api_tokens": {
+            "type": "integer"
+          },
+          "prices": {
+            "type": "object",
+            "properties": {
+              "model_to_vrm": {
+                "type": "integer",
+                "examples": [
+                  10
+                ]
+              },
+              "image_to_vrm": {
+                "type": "integer",
+                "examples": [
+                  25
+                ]
+              },
+              "fix_picture": {
+                "type": "integer",
+                "examples": [
+                  2
+                ]
+              }
+            }
+          },
+          "max_active_conversions": {
+            "type": "integer",
+            "examples": [
+              3
+            ]
+          }
+        }
+      },
+      "ErrorDetail": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_request",
+                  "unsupported_file",
+                  "unauthorized",
+                  "insufficient_tokens",
+                  "not_found",
+                  "method_not_allowed",
+                  "not_ready",
+                  "file_too_large",
+                  "picture_rejected",
+                  "too_many_active",
+                  "unavailable"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "required": {
+                "type": "integer",
+                "description": "insufficient_tokens: what the action costs."
+              },
+              "available": {
+                "type": "integer",
+                "description": "insufficient_tokens: the current balance."
+              }
+            }
+          }
+        }
+      },
+      "PictureRejected": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "problems"
+            ],
+            "properties": {
+              "code": {
+                "const": "picture_rejected"
+              },
+              "message": {
+                "type": "string"
+              },
+              "problems": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "not_humanoid",
+                        "multi_view",
+                        "not_full_body",
+                        "not_front"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "`invalid_request` or `unsupported_file`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "`unauthorized`: no key, or not a valid one.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InsufficientTokens": {
+        "description": "`insufficient_tokens`, with `required` and `available`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "`not_found`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotReady": {
+        "description": "`not_ready`: `status` is not `succeeded` yet.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "FileTooLarge": {
+        "description": "`file_too_large`: models up to 100 MB, pictures up to 20 MB.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooManyActive": {
+        "description": "`too_many_active`: 3 conversions (and, separately, 3 picture fixes) in flight per account. Has a Retry-After header.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "`unavailable`: pictures are switched off right now.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

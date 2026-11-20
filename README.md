@@ -13,6 +13,7 @@ python python/riggle.py convert character.glb -o character.vrm
 ```
 
 - API reference: <https://riggle3d.com/en/guides/vrm-api>
+- OpenAPI 3.1 spec: [`openapi.json`](openapi.json), also at <https://riggle3d.com/openapi.json>
 - API keys: <https://app.riggle3d.com/developers/> (the API is paid in API
   tokens; a key works once a pack is bought)
 
@@ -364,6 +365,7 @@ files with no dependencies; copy the one you need.
 
 - Riggle: <https://riggle3d.com>
 - API reference: <https://riggle3d.com/en/guides/vrm-api>
+- OpenAPI 3.1 spec: [`openapi.json`](openapi.json)
 - API keys and tokens: <https://app.riggle3d.com/developers/>
 - Guide, GLB to VRM: <https://riggle3d.com/en/guides/glb-to-vrm>
 - Guide, image to VRM: <https://riggle3d.com/en/guides/image-to-vrm>
